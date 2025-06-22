@@ -2,10 +2,13 @@ const Offer = require("../models/offerModel");
 
 const createOffer = async (req, res) => {
     try {
-        const { offerText } = req.body;
-        const newOffer = new Offer({ offerText });
+        const { name } = req.body;
+
+        const newOffer = new Offer({ offerText: name });
+
         const result = await newOffer.save();
-        res.status(201).json(newOffer);
+
+        res.status(201).json(result);
     } catch (error) {
         res.status(500).json({ error: "Failed to create offer." });
     }
