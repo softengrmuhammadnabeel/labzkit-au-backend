@@ -6,6 +6,7 @@ const {
   deleteProduct,
   getAllProductsByCategory,
   updateProduct,
+  deleteProductImages,
 } = require("../controllers/productController");
 const upload = require("../config/multerConfig");
 const router = express.Router();
@@ -24,9 +25,10 @@ router.get("/:id", getProductById);
 
 // DELETE route to delete a product by ID
 router.delete("/:id", deleteProduct);
+router.delete('/:id/images', deleteProductImages);
 
 // PUT Updatedelete a product by ID
 // router.put("/update/:id",  updateProduct);
-router.put("/update/:id", upload.array("images", 5), updateProduct);
+router.put("/update/:id", upload.array("images"), updateProduct);
 
 module.exports = router;

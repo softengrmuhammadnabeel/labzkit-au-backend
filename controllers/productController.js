@@ -3,61 +3,78 @@ const Category = require("../models/categoryModel");
 const DOMPurify = require("dompurify");
 const { JSDOM } = require("jsdom");
 
-const { uploadImagesToCloudinary } = require("../utils/cloudinary");
+const { uploadImagesToCloudinary, deleteImagesFromCloudinary } = require("../utils/cloudinary");
+
 
 // Initialize DOMPurify with JSDOM for server-side use
 const window = new JSDOM("").window;
 const DOMPurifyInstance = DOMPurify(window);
-
 const createProduct = async (req, res) => {
-  const {
-    name,
-    category,
-    price,
-    discountedPrice,
-    quantity,
-    size,
-    color,
-    gender,
-    description,
-  } = req.body;
-  // const images = req.files?.map((file) => uploadImagesToCloudinary(file, 'product_images')) || [];
-  // Upload images to Cloudinary and get the image URLs
-  const images = req.files ? await uploadImagesToCloudinary(req.files, 'product_images') : [];
   try {
+    const {
+      name,
+      category,
+      price,
+      discountedPrice,
+      quantity,
+      size,
+      color,
+      gender,
+      description,
+      existingImages = "[]", // Comes as a stringified JSON
+    } = req.body;
+
+    // Parse arrays from form-data fields
+    const sizeArray = Array.isArray(size) ? size : JSON.parse(size);
+    const colorArray = Array.isArray(color) ? color : JSON.parse(color);
+    const oldImages = JSON.parse(existingImages);
+
+    // Upload new images (req.files.images[] for multiple)
+    let newImages = [];
+    if (req.files && req.files.images) {
+      const files = Array.isArray(req.files.images) ? req.files.images : [req.files.images];
+      newImages = await uploadImagesToCloudinary(files, "product_images"); // Must return secure_url
+    }
+
+    const finalImages = [
+      ...oldImages, // From front-end (already uploaded)
+      ...newImages.map((img) => img.secure_url), // From new upload
+    ];
+
+    // Check if category exists
     const categoryDoc = await Category.findById(category);
     if (!categoryDoc) {
       return res.status(400).json({ message: "Category does not exist" });
     }
-    // Ensure size and color are arrays
-    const sizeArray = Array.isArray(size) ? size : JSON.parse(size);
-    const colorArray = Array.isArray(color) ? size : JSON.parse(color);
 
-    // Sanitize description
+    // Sanitize rich text
     const sanitizedDescription = DOMPurifyInstance.sanitize(description);
 
     const product = new Product({
       name,
       category: categoryDoc._id,
       price,
-      quantity,
       discountedPrice,
+      quantity,
       size: sizeArray,
       color: colorArray,
       gender,
       description: sanitizedDescription,
-      images,
+      images: finalImages,
     });
 
     await product.save();
 
     res.status(201).json(product);
   } catch (error) {
-    res
-      .status(500)
-      .json({ message: "Error creating product", error: error.message });
+    console.error("Product creation failed:", error);
+    if (error?.http_code === 400 && error.message.includes("File size too large")) {
+      return res.status(400).json({ success: false, message: error.message });
+    }
+    res.status(500).json({ success: false, message: "Server error" });
   }
 };
+
 
 
 const getAllProducts = async (req, res) => {
@@ -84,7 +101,7 @@ const getAllProducts = async (req, res) => {
 
     // Get total count of products to calculate the total pages
     const totalProducts = await Product.countDocuments(filter);
-
+    // console.log(products);
     // Calculate total pages
     const totalPages = Math.ceil(totalProducts / pageLimit);
 
@@ -176,7 +193,7 @@ const updateProduct = async (req, res) => {
   } = req.body;
 
   try {
-    let newImages;
+
     const product = await Product.findById(id);
     if (!product) {
       return res.status(404).json({ message: "Product not found" });
@@ -184,6 +201,7 @@ const updateProduct = async (req, res) => {
 
     const updateData = {};
 
+    // Update basic fields
     if (name) updateData.name = name;
     if (category) {
       const categoryDoc = await Category.findById(category);
@@ -195,37 +213,25 @@ const updateProduct = async (req, res) => {
     if (price) updateData.price = price;
     if (discountedPrice) updateData.discountedPrice = discountedPrice || 0;
     if (quantity) updateData.quantity = quantity;
-    if (size) updateData.size = Array.isArray(size) ? size : JSON.parse(size);
-    if (color)
-      updateData.color = Array.isArray(color) ? color : JSON.parse(color);
+    if (size) updateData.size = Array.isArray(size) ? size : JSON.parse(size || "[]");
+    if (color) updateData.color = Array.isArray(color) ? color : JSON.parse(color || "[]");
     if (gender) updateData.gender = gender;
     if (description) updateData.description = description;
-    // if (req.files.length > 0) {
-    //   newImages = req.files?.map((file) => file.filename) || [];
-    //   updateData.images = [...product.images, ...newImages]; // Merge new images with existing ones
-    // } else {
-    //   newImages = req.body.images;
-    //   if (!Array.isArray(newImages)) {
-    //     newImages = [];
-    //   }
-    //   updateData.images = newImages;
-    // }
 
+    // Handle images
     if (req.files && req.files.length > 0) {
-      // Upload to Cloudinary
-      const uploadResults = await uploadImagesToCloudinary(req.files, 'product_images');
+      try {
+        const newImages = await uploadImagesToCloudinary(req.files, "product_images");
 
-      // Cloudinary returns full objects, extract the secure URLs
-      const newImages = uploadResults.map(result => result.secure_url);
-
-      // Merge with existing images
-      updateData.images = [...product.images, ...newImages];
-    } else {
-      newImages = req.body.images;
-      if (!Array.isArray(newImages)) {
-        newImages = [];
+        const existingImages = Array.isArray(product.images) ? product.images : [];
+        updateData.images = [...existingImages, ...newImages];
+      } catch (error) {
+        console.error('Image Upload Error:', error);
+        return res.status(500).json({ message: "Image upload failed", error: error.message });
       }
-      updateData.images = newImages;
+    } else {
+      // If no new images, retain existing images
+      updateData.images = Array.isArray(product.images) ? product.images : [];
     }
 
 
@@ -237,11 +243,53 @@ const updateProduct = async (req, res) => {
 
     res.status(200).json(updatedProduct);
   } catch (error) {
-    res
-      .status(500)
-      .json({ message: "Error updating product", error: error.message });
+    console.error('Error updating product:', error);
+    res.status(500).json({ message: "Error updating product", error: error.message });
   }
 };
+
+const deleteProductImages = async (req, res) => {
+  const { id } = req.params; // Product ID
+  const { imagesToDelete } = req.body; // Array of image URLs to delete
+  if (!imagesToDelete.length === 0) {
+    return res.status(400).json({ message: "No images specified for deletion." });
+  }
+
+  try {
+    // Find the product in the database
+    const product = await Product.findById(id);
+    if (!product) {
+      return res.status(404).json({ message: "Product not found." });
+    }
+
+    // Delete specified images from Cloudinary
+    try {
+      const deleteResults = await deleteImagesFromCloudinary(imagesToDelete);
+    } catch (cloudinaryError) {
+      // console.error("Cloudinary Deletion Error:", cloudinaryError.message);
+    }
+
+    // Remove only the specified images from the MongoDB images array
+    const updatedImages = product.images.filter(
+      (image) => !imagesToDelete.includes(image)
+    );
+
+    // Update the product's images array in MongoDB
+    product.images = updatedImages;
+    await product.save();
+
+    // Respond with the updated product
+    res.status(200).json({
+      message: "Images deleted successfully from Cloudinary and MongoDB.",
+      updatedProduct: product,
+    });
+  } catch (error) {
+    console.error("Error deleting product images:", error);
+    res.status(500).json({ message: "Error deleting images.", error: error.message });
+  }
+};
+
+
 
 module.exports = {
   createProduct,
@@ -250,4 +298,5 @@ module.exports = {
   getProductById,
   deleteProduct,
   updateProduct,
+  deleteProductImages
 };
