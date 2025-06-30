@@ -31,41 +31,31 @@ const registerUser = async (req, res) => {
   }
 };
 
-// Login user
 const loginUser = async (req, res) => {
-  const { email, password } = req.body;
+  console.log(req.body);
+  const { username, password } = req.body;
 
   try {
-    const user = await User.findOne({ email });
-    if (!user) {
-      return res.status(400).json({ msg: "Invalid credentials" });
+    if (
+      process.env.NODE_APP_USER_EMAIL === username &&
+      process.env.NODE_APP_USER_PASSWORD === password
+    ) {
+      return res.json({
+        message: true,
+        token: 'A2m9L@*&92bjadmIuhuq88mAj8mqdna--AosdamnASMDjajd-as9mALMJAL12nalmdl23@**dns',
+        isAdmin: '8lKASndjq9A*&nlkQjAmL*&8malkmsN2ajKldJ0aKLAS8ndajk9AosdkNAL8mknsdAKld02nak',
+      });
     }
 
-    const isMatch = await user.matchPassword(password);
-    if (!isMatch) {
-      return res.status(400).json({ msg: "Invalid credentials" });
-    }
-
-    const token = jwt.sign(
-      {
-        userId: user._id,
-        email: user.email,
-        name: `${user.firstName} ${user.lastName}`,
-      },
-      process.env.JWT_SECRET,
-      {
-        expiresIn: "1h",
-      }
-    );
-
+    // If credentials don't match, send a default response
     res.json({
-      token,
-      user: { name: `${user.firstName} ${user.lastName}`, email: user.email },
-      isAdmin: user.isAdmin,
+      isAdmin: false,
+      message: false,
+      token: null,
     });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ msg: "Server error" });
+    res.status(500).json({ msg: 'Server error' });
   }
 };
 
