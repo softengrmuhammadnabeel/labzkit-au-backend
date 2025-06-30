@@ -35,23 +35,60 @@ const loginUser = async (req, res) => {
   const { username, password } = req.body;
 
   try {
-    if (
-      process.env.NODE_APP_USER_EMAIL === username &&
-      process.env.NODE_APP_USER_PASSWORD === password
-    ) {
-      return res.json({
-        message: true,
-        token: 'A2m9L@*&92bjadmIuhuq88mAj8mqdna--AosdamnASMDjajd-as9mALMJAL12nalmdl23@**dns',
-        isAdmin: '8lKASndjq9A*&nlkQjAmL*&8malkmsN2ajKldJ0aKLAS8ndajk9AosdkNAL8mknsdAKld02nak',
+
+    const userExists = await User.findOne({ email: username });
+    if (!userExists) {
+      res.json({
+        isAdmin: false,
+        message: false,
+        token: null,
       });
     }
+    else if (userExists) {
 
-    // If credentials don't match, send a default response
-    res.json({
-      isAdmin: false,
-      message: false,
-      token: null,
-    });
+      if (userExists?.isAdmin === true) {
+        if (userExists?.password === password && userExists?.email === username) {
+          return res.json({
+            message: true,
+            token: 'A2m9L@*&92bjadmIuhuq88mAj8mqdna--AosdamnASMDjajd-as9mALMJAL12nalmdl23@**dns',
+            isAdmin: '8lKASndjq9A*&nlkQjAmL*&8malkmsN2ajKldJ0aKLAS8ndajk9AosdkNAL8mknsdAKld02nak',
+          });
+        }
+        else {
+          res.json({
+            isAdmin: false,
+            message: false,
+            token: null,
+          });
+        }
+      }
+      else {
+        res.json({
+          isAdmin: false,
+          message: false,
+          token: null,
+        });
+      }
+    }
+
+    // if (
+    //   process.env.NODE_APP_USER_EMAIL === username &&
+    //   process.env.NODE_APP_USER_PASSWORD === password
+    // ) {
+    //   return res.json({
+    //     message: true,
+    //     token: 'A2m9L@*&92bjadmIuhuq88mAj8mqdna--AosdamnASMDjajd-as9mALMJAL12nalmdl23@**dns',
+    //     isAdmin: '8lKASndjq9A*&nlkQjAmL*&8malkmsN2ajKldJ0aKLAS8ndajk9AosdkNAL8mknsdAKld02nak',
+    //   });
+    // }
+
+    else {
+      res.json({
+        isAdmin: false,
+        message: false,
+        token: null,
+      });
+    }
   } catch (error) {
     console.error(error);
     res.status(500).json({ msg: 'Server error' });
