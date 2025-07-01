@@ -21,25 +21,34 @@ const createProduct = async (req, res) => {
       color,
       gender,
       description,
-      existingImages = "[]", // Comes as a stringified JSON
     } = req.body;
 
     // Parse arrays from form-data fields
     const sizeArray = Array.isArray(size) ? size : JSON.parse(size);
     const colorArray = Array.isArray(color) ? color : JSON.parse(color);
-    const oldImages = JSON.parse(existingImages);
-
-    // Upload new images (req.files.images[] for multiple)
+    let files = Array.isArray(req.files) ? req.files : [req.files];
     let newImages = [];
-    if (req.files && req.files.images) {
-      const files = Array.isArray(req.files.images) ? req.files.images : [req.files.images];
-      newImages = await uploadImagesToCloudinary(files, "product_images"); // Must return secure_url
+    try {
+      if (files.length > 0) {
+        // console.log("Processing files:", files);
+
+        // Upload images to Cloudinary
+        newImages = await uploadImagesToCloudinary(files, "product_images");
+        // console.log("Uploaded Images URLs:", newImages);
+      } else {
+        // console.log("No files to process.");
+      }
+
+
+    } catch (error) {
+      return res.status(400).json({ success: false, message: "Product Upload Error:" + error.message });
     }
 
-    const finalImages = [
-      ...oldImages, // From front-end (already uploaded)
-      ...newImages.map((img) => img.secure_url), // From new upload
-    ];
+    // const finalImages = [
+    //   // ...oldImages, // From front-end (already uploaded)
+    //   ...newImages.map((img) => img.secure_url), // From new upload
+    // ];
+    // console.log(finalImages);
 
     // Check if category exists
     const categoryDoc = await Category.findById(category);
@@ -60,7 +69,7 @@ const createProduct = async (req, res) => {
       color: colorArray,
       gender,
       description: sanitizedDescription,
-      images: finalImages,
+      images: newImages,
     });
 
     await product.save();
@@ -79,7 +88,7 @@ const createProduct = async (req, res) => {
 
 const getAllProducts = async (req, res) => {
   try {
-    const { name, gender, page = 1, limit = 10 } = req.query;
+    const { name, gender, page = 1, limit = 100 } = req.query;
     const filter = {};
 
     // Apply filters if query parameters are provided
@@ -87,8 +96,8 @@ const getAllProducts = async (req, res) => {
     if (gender) filter.gender = gender;
 
     // Convert page and limit to numbers
-    const pageNumber = parseInt(page, 10);
-    const pageLimit = parseInt(limit, 10);
+    const pageNumber = parseInt(page, 100);
+    const pageLimit = parseInt(limit, 100);
 
     // Calculate skip value for pagination
     const skip = (pageNumber - 1) * pageLimit;

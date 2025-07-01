@@ -14,7 +14,7 @@ const createCategory = async (req, res) => {
     if (existingCategory) {
       return res.status(400).json({ message: "Category already exists" });
     }
-    
+
     const category = new Category({
       name,
       image,
@@ -30,11 +30,10 @@ const createCategory = async (req, res) => {
       .json({ message: "Error creating category", error: error.message });
   }
 };
-
 const updateCategory = async (req, res) => {
   const { id } = req.params; // Category ID from route params
   const { name } = req.body; // New name for the category
-  let image = ""; // New image file, if provided
+
   try {
     // Check if the category exists
     const category = await Category.findById(id);
@@ -49,21 +48,28 @@ const updateCategory = async (req, res) => {
         return res.status(400).json({ message: "Category with this name already exists" });
       }
     }
-    const imagePath = req.file ? await uploadImagesToCloudinary(req.file, 'category_images') : '';
+
+    // Handle image upload
+    let imagePath = '';
+    if (req.file) {
+      try {
+        imagePath = await uploadImagesToCloudinary(req.file, 'category_images');
+      } catch (uploadError) {
+        return res.status(500).json({ message: "Image upload failed", error: uploadError.message });
+      }
+    }
 
     // Update fields
     if (name) category.name = name;
-    if (image) category.image = imagePath;
+    if (imagePath.length > 0) category.image = imagePath[0];
 
     // Save updated category
     const updatedCategory = await category.save();
 
     res.status(200).json(updatedCategory);
   } catch (error) {
-    console.error(error);
-    res
-      .status(500)
-      .json({ message: "Error updating category", error: error.message });
+    console.error("Error updating category:", error);
+    res.status(500).json({ message: "Error updating category", error: error.message });
   }
 };
 
